@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 const (
@@ -82,7 +84,8 @@ func main() {
 	}
 
 	// 5. Generate commit message using LLM.
-	commitMsg, err := generateCommitMessage(openRouterAPIKey, diffOutput)
+	language := getLanguagePreference()
+	commitMsg, err := generateCommitMessage(openRouterAPIKey, diffOutput, language)
 	if err != nil {
 		log.Fatalf("Error generating commit message: %v", err)
 	}
@@ -148,9 +151,29 @@ func getGitDiff() (string, error) {
 	return "Git Status (staged files):\n" + statusOut.String() + "\nGit Diff (staged changes):\n" + diffOut.String(), nil
 }
 
+// getLanguagePreference prompts the user to select a language for the commit message.
+func getLanguagePreference() string {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter commit language (en/es) [en]: ")
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+
+	if input == "es" {
+		return "Spanish"
+	}
+	return "English"
+}
+
 // generateCommitMessage calls the OpenRouter API to generate a commit message.
-func generateCommitMessage(apiKey, diff string) (*CommitMessage, error) {
-	prompt := fmt.Sprintf("Analyze the following git diff and generate a concise commit title (max 70 chars) and a detailed commit description. Respond in JSON format according to the schema:\n\n```json\n%s\n```\n\nGit Diff:\n```diff\n%s\n```", `
+func generateCommitMessage(apiKey, diff, language string) (*CommitMessage, error) {
+	var instruction string
+	if language == "Spanish" {
+		instruction = "Analiza el siguiente git diff y genera un título de commit conciso (máx. 70 caracteres) y una descripción detallada del commit. Responde en formato JSON de acuerdo con el esquema:"
+	} else {
+		instruction = "Analyze the following git diff and generate a concise commit title (max 70 chars) and a detailed commit description. Respond in JSON format according to the schema:"
+	}
+
+	prompt := fmt.Sprintf("%s\n\n```json\n%s\n```\n\nGit Diff:\n```diff\n%s\n```", instruction, `
 		{
 		  "type": "object",
 		  "properties": {
