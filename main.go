@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag" // Import the flag package
 	"fmt"
 	"log"
 	"net/http"
@@ -12,7 +13,7 @@ import (
 
 const (
 	openRouterAPIURL = "https://openrouter.ai/api/v1/chat/completions"
-	llmModel         = "tngtech/deepseek-r1t2-chimera:free" // Or any other model that supports structured outputs
+	defaultLLMModel  = "tngtech/deepseek-r1t2-chimera:free" // Renamed to defaultLLMModel
 )
 
 // CommitMessage defines the structure for the LLM's generated commit message.
@@ -23,8 +24,8 @@ type CommitMessage struct {
 
 // LLMRequest represents the request body for the OpenRouter API.
 type LLMRequest struct {
-	Model         string        `json:"model"`
-	Messages      []LLMMessage  `json:"messages"`
+	Model          string            `json:"model"`
+	Messages       []LLMMessage      `json:"messages"`
 	ResponseFormat LLMResponseFormat `json:"response_format"`
 }
 
@@ -36,7 +37,7 @@ type LLMMessage struct {
 
 // LLMResponseFormat defines the structured output format for the LLM.
 type LLMResponseFormat struct {
-	Type     string            `json:"type"`
+	Type       string        `json:"type"`
 	JSONSchema LLMJSONSchema `json:"json_schema"`
 }
 
@@ -59,6 +60,11 @@ type LLMResponse struct {
 func main() {
 	log.SetFlags(0) // Disable timestamp and file location in logs
 
+	// Define command-line flags
+	apiKeyFlag := flag.String("k", "", "OpenRouter API Key (overrides OPENROUTER_API_KEY env var)")
+	modelFlag := flag.String("m", defaultLLMModel, "OpenRouter model to use")
+	flag.Parse()
+
 	// 1. Check if the current directory is a Git repository.
 	if err := runGitCommand("rev-parse", "--is-inside-work-tree"); err != nil {
 		log.Fatalf("Error: Not a Git repository or git not installed. %v", err)
@@ -75,14 +81,24 @@ func main() {
 	}
 	log.Println("Git diff obtained.")
 
-	// 4. Get OPENROUTER_API_KEY from environment.
-	openRouterAPIKey := os.Getenv("OPENROUTER_API_KEY")
-	if openRouterAPIKey == "" {
-		log.Fatal("Error: OPENROUTER_API_KEY environment variable not set.")
+	// Determine API Key
+	var openRouterAPIKey string
+	if *apiKeyFlag != "" {
+		openRouterAPIKey = *apiKeyFlag
+	} else {
+		openRouterAPIKey = os.Getenv("OPENROUTER_API_KEY")
 	}
 
+	if openRouterAPIKey == "" {
+		log.Fatal("Error: OPENROUTER_API_KEY environment variable not set and -k flag not provided.")
+	}
+
+	// Determine LLM Model
+	selectedLLMModel := *modelFlag
+	log.Printf("Using LLM Model: %s\n", selectedLLMModel)
+
 	// 5. Generate commit message using LLM.
-	commitMsg, err := generateCommitMessage(openRouterAPIKey, diffOutput)
+	commitMsg, err := generateCommitMessage(openRouterAPIKey, selectedLLMModel, diffOutput)
 	if err != nil {
 		log.Fatalf("Error generating commit message: %v", err)
 	}
@@ -149,7 +165,7 @@ func getGitDiff() (string, error) {
 }
 
 // generateCommitMessage calls the OpenRouter API to generate a commit message.
-func generateCommitMessage(apiKey, diff string) (*CommitMessage, error) {
+func generateCommitMessage(apiKey, model, diff string) (*CommitMessage, error) {
 	prompt := fmt.Sprintf("Analyze the following git diff and generate a concise commit title (max 70 chars) and a detailed commit description. Respond in JSON format according to the schema:\n\n```json\n%s\n```\n\nGit Diff:\n```diff\n%s\n```", `
 		{
 		  "type": "object",
@@ -185,7 +201,7 @@ func generateCommitMessage(apiKey, diff string) (*CommitMessage, error) {
 	}
 
 	requestBody := LLMRequest{
-		Model: llmModel,
+		Model: model,
 		Messages: []LLMMessage{
 			{Role: "user", Content: prompt},
 		},
