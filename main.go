@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"flag" // Import the flag package
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,7 +13,7 @@ import (
 
 const (
 	openRouterAPIURL = "https://openrouter.ai/api/v1/chat/completions"
-	defaultLLMModel  = "tngtech/deepseek-r1t2-chimera:free" // Renamed to defaultLLMModel
+	defaultLLMModel  = "tngtech/deepseek-r1t2-chimera:free"
 )
 
 // CommitMessage defines the structure for the LLM's generated commit message.
@@ -65,7 +65,7 @@ func main() {
 	modelFlag := flag.String("m", defaultLLMModel, "OpenRouter model to use")
 	flag.Parse()
 
-	// 1. Check if the current directory is a Git repository.
+	// Check if the current directory is a Git repository.
 	if err := runGitCommand("rev-parse", "--is-inside-work-tree"); err != nil {
 		log.Fatalf("Error: Not a Git repository or git not installed. %v", err)
 	}
@@ -97,7 +97,7 @@ func main() {
 	selectedLLMModel := *modelFlag
 	log.Printf("Using LLM Model: %s\n", selectedLLMModel)
 
-	// 5. Generate commit message using LLM.
+	// Generate commit message using LLM.
 	commitMsg, err := generateCommitMessage(openRouterAPIKey, selectedLLMModel, diffOutput)
 	if err != nil {
 		log.Fatalf("Error generating commit message: %v", err)
@@ -105,7 +105,7 @@ func main() {
 	log.Printf("Generated Commit Title: %s\n", commitMsg.Title)
 	log.Printf("Generated Commit Description:\n%s\n", commitMsg.Description)
 
-	// 6. Execute git commit.
+	// Stage and commit changes.
 	if err := runGitCommand("add", "."); err != nil {
 		log.Fatalf("Error during git commit: %v", err)
 	}
@@ -116,7 +116,7 @@ func main() {
 	}
 	log.Println("Git commit successful.")
 
-	// 7. Execute git push.
+	// Push changes to remote.
 	log.Println("Executing git push...")
 	if err := runGitCommand("push"); err != nil {
 		log.Fatalf("Error during git push: %v", err)
@@ -151,8 +151,8 @@ func getGitDiff() (string, error) {
 		return "", fmt.Errorf("failed to get git status --short: %w", err)
 	}
 
-	// Get cached diff
-	diffCmd := exec.Command("git", "diff")
+	// Get staged diff
+	diffCmd := exec.Command("git", "diff", "--cached")
 	var diffOut bytes.Buffer
 	diffCmd.Stdout = &diffOut
 	diffCmd.Stderr = os.Stderr // Print errors directly
